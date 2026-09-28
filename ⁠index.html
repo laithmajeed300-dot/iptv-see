@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مشغل IPTV الذكي</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HLS.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        .glass {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Header / Navbar -->
+    <header class="glass h-16 px-4 flex items-center justify-between z-20 shrink-0 border-b border-slate-700/50">
+        <div class="flex items-center gap-3">
+            <button id="toggleSidebar" class="p-2 hover:bg-slate-700/50 rounded-lg lg:hidden text-slate-300">
+                <i data-lucide="menu"></i>
+            </button>
+            <div class="flex items-center gap-2">
+                <div class="bg-indigo-600 p-2 rounded-xl text-white">
+                    <i data-lucide="tv"></i>
+                </div>
+                <h1 class="font-bold text-lg text-white">مشغل IPTV</h1>
+            </div>
+        </div>
+
+        <!-- Load Playlist Button & Search -->
+        <div class="flex items-center gap-2">
+            <button id="openLoadModal" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-sm transition">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>قائمة جديدة</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <div class="flex flex-1 overflow-hidden relative">
+
+        <!-- Sidebar / Channel List -->
+        <aside id="sidebar" class="absolute lg:relative inset-y-0 right-0 w-80 glass z-10 flex flex-col transform translate-x-full lg:translate-x-0 transition-transform duration-300 border-l border-slate-700/50">
+            <!-- Search & Filter Controls -->
+            <div class="p-3 border-b border-slate-700/50 space-y-2">
+                <div class="relative">
+                    <input type="text" id="searchInput" placeholder="بحث عن قناة..." class="w-full bg-slate-900/80 text-sm rounded-lg pr-9 pl-3 py-2 border border-slate-700 focus:outline-none focus:border-indigo-500 text-slate-200 placeholder-slate-400">
+                    <i data-lucide="search" class="w-4 h-4 absolute right-3 top-2.5 text-slate-400"></i>
+                </div>
+                
+                <div class="flex gap-2">
+                    <select id="groupSelect" class="w-full bg-slate-900/80 text-xs rounded-lg px-2 py-1.5 border border-slate-700 focus:outline-none focus:border-indigo-500 text-slate-300">
+                        <option value="ALL">جميع التصنيفات</option>
+                    </select>
+                    <button id="favFilterBtn" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-300 flex items-center gap-1">
+                        <i data-lucide="star" class="w-3.5 h-3.5 text-amber-400"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Channels List -->
+            <div id="channelList" class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                <div class="text-center text-slate-500 py-10 text-sm">
+                    لا توجد قنوات. يرجى إضافة قائمة تشغيل M3U.
+                </div>
+            </div>
+        </aside>
+
+        <!-- Player Area -->
+        <main class="flex-1 flex flex-col bg-black relative overflow-hidden justify-center items-center">
+            <video id="videoPlayer" class="w-full h-full object-contain" controls></video>
+
+            <!-- Video Overlay Info -->
+            <div id="channelOverlay" class="absolute top-4 right-4 glass px-4 py-2 rounded-xl flex items-center gap-3 hidden border border-slate-700">
+                <img id="overlayLogo" src="" class="w-8 h-8 rounded object-contain hidden" alt="">
+                <div>
+                    <h2 id="overlayTitle" class="text-sm font-semibold text-white"></h2>
+                    <p id="overlayGroup" class="text-xs text-slate-400"></p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal: Add Playlist -->
+    <div id="loadModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass max-w-md w-full rounded-2xl p-5 border border-slate-700 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-700/50 pb-3">
+                <h3 class="font-bold text-white flex items-center gap-2">
+                    <i data-lucide="link" class="text-indigo-400 w-5 h-5"></i>
+                    إضافة قائمة تشغيل M3U
+                </h3>
+                <button id="closeLoadModal" class="text-slate-400 hover:text-white">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex border-b border-slate-700 text-sm">
+                <button id="tabUrl" class="flex-1 py-2 border-b-2 border-indigo-500 text-indigo-400 font-medium">رابط URL</button>
+                <button id="tabFile" class="flex-1 py-2 text-slate-400 hover:text-slate-200">رفع ملف</button>
+            </div>
+
+            <!-- URL Input -->
+            <div id="panelUrl" class="space-y-3">
+                <input type="text" id="m3uUrlInput" placeholder="ضع رابط M3U أو M3U8 هنا..." class="w-full bg-slate-900/90 text-sm rounded-lg px-3 py-2 border border-slate-700 focus:outline-none focus:border-indigo-500 text-slate-200">
+                <button id="loadDemoBtn" class="text-xs text-indigo-400 hover:underline">تجربة قائمة تجريبية مجانية</button>
+            </div>
+
+            <!-- File Input -->
+            <div id="panelFile" class="space-y-3 hidden">
+                <input type="file" id="m3uFileInput" accept=".m3u,.m3u8,.txt" class="w-full text-xs text-slate-400 file:ml-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
+            </div>
+
+            <div class="pt-2">
+                <button id="submitPlaylist" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-medium transition text-sm flex items-center justify-center gap-2">
+                    <span>تحميل القناة</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // Init Lucide Icons
+        lucide.createIcons();
+
+        // App State
+        let channels = [];
+        let filteredChannels = [];
+        let favorites = JSON.parse(localStorage.getItem('iptv_favs') || '[]');
+        let currentGroup = 'ALL';
+        let showOnlyFavs = false;
+        let hls = null;
+
+        // Elements
+        const video = document.getElementById('videoPlayer');
+        const channelList = document.getElementById('channelList');
+        const searchInput = document.getElementById('searchInput');
+        const groupSelect = document.getElementById('groupSelect');
+        const favFilterBtn = document.getElementById('favFilterBtn');
+        const toggleSidebar = document.getElementById('toggleSidebar');
+        const sidebar = document.getElementById('sidebar');
+
+        // Modal Elements
+        const loadModal = document.getElementById('loadModal');
+        const openLoadModal = document.getElementById('openLoadModal');
+        const closeLoadModal = document.getElementById('closeLoadModal');
+        const tabUrl = document.getElementById('tabUrl');
+        const tabFile = document.getElementById('tabFile');
+        const panelUrl = document.getElementById('panelUrl');
+        const panelFile = document.getElementById('panelFile');
+        const m3uUrlInput = document.getElementById('m3uUrlInput');
+        const m3uFileInput = document.getElementById('m3uFileInput');
+        const submitPlaylist = document.getElementById('submitPlaylist');
+        const loadDemoBtn = document.getElementById('loadDemoBtn');
+
+        // Overlay Elements
+        const channelOverlay = document.getElementById('channelOverlay');
+        const overlayTitle = document.getElementById('overlayTitle');
+        const overlayGroup = document.getElementById('overlayGroup');
+        const overlayLogo = document.getElementById('overlayLogo');
+
+        // Event Listeners
+        toggleSidebar.addEventListener('click', () => sidebar.classList.toggle('translate-x-full'));
+        openLoadModal.addEventListener('click', () => loadModal.classList.remove('hidden'));
+        closeLoadModal.addEventListener('click', () => loadModal.classList.add('hidden'));
+
+        tabUrl.addEventListener('click', () => {
+            tabUrl.className = "flex-1 py-2 border-b-2 border-indigo-500 text-indigo-400 font-medium";
+            tabFile.className = "flex-1 py-2 text-slate-400 hover:text-slate-200";
+            panelUrl.classList.remove('hidden');
+            panelFile.classList.add('hidden');
+        });
+
+        tabFile.addEventListener('click', () => {
+            tabFile.className = "flex-1 py-2 border-b-2 border-indigo-500 text-indigo-400 font-medium";
+            tabUrl.className = "flex-1 py-2 text-slate-400 hover:text-slate-200";
+            panelFile.classList.remove('hidden');
+            panelUrl.classList.add('hidden');
+        });
+
+        loadDemoBtn.addEventListener('click', () => {
+            m3uUrlInput.value = "https://iptv-org.github.io/iptv/languages/ara.m3u";
+        });
+
+        submitPlaylist.addEventListener('click', async () => {
+            if (!panelUrl.classList.contains('hidden')) {
+                const url = m3uUrlInput.value.trim();
+                if (url) await fetchAndParseM3U(url);
+            } else {
+                const file = m3uFileInput.files[0];
+                if (file) {
+                    const text = await file.text();
+                    parseM3UContent(text);
+                }
+            }
+            loadModal.classList.add('hidden');
+        });
+
+        searchInput.addEventListener('input', filterChannels);
+        groupSelect.addEventListener('change', (e) => {
+            currentGroup = e.target.value;
+            filterChannels();
+        });
+
+        favFilterBtn.addEventListener('click', () => {
+            showOnlyFavs = !showOnlyFavs;
+            favFilterBtn.classList.toggle('bg-amber-500/20', showOnlyFavs);
+            favFilterBtn.classList.toggle('border-amber-500/50', showOnlyFavs);
+            filterChannels();
+        });
+
+        // Parse M3U
+        async function fetchAndParseM3U(url) {
+            try {
+                const response = await fetch(url);
+                const text = await response.text();
+                parseM3UContent(text);
+            } catch (err) {
+                alert('حدث خطأ أثناء تحميل القائمة. يرجى التأكد من صحة الرابط وسماح السيرفر بالإرسال (CORS).');
+            }
+        }
+
+        function parseM3UContent(content) {
+            const lines = content.split('\n');
+            channels = [];
+            const groups = new Set();
+
+            let currentChannel = null;
+
+            lines.forEach(line => {
+                line = line.trim();
+                if (line.startsWith('#EXTINF:')) {
+                    const nameMatch = line.match(/,(.+)$/);
+                    const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+                    const groupMatch = line.match(/group-title="([^"]+)"/);
+
+                    currentChannel = {
+                        id: Math.random().toString(36).substring(2, 9),
+                        name: nameMatch ? nameMatch[1].trim() : 'قناة غير معروفة',
+                        logo: logoMatch ? logoMatch[1] : '',
+                        group: groupMatch ? groupMatch[1] : 'عام',
+                        url: ''
+                    };
+                    groups.add(currentChannel.group);
+                } else if (line && !line.startsWith('#') && currentChannel) {
+                    currentChannel.url = line;
+                    channels.push(currentChannel);
+                    currentChannel = null;
+                }
+            });
+
+            // Update Group Dropdown
+            groupSelect.innerHTML = '<option value="ALL">جميع التصنيفات</option>';
+            Array.from(groups).sort().forEach(grp => {
+                const opt = document.createElement('option');
+                opt.value = grp;
+                opt.textContent = grp;
+                groupSelect.appendChild(opt);
+            });
+
+            filterChannels();
+        }
+
+        function filterChannels() {
+            const query = searchInput.value.toLowerCase();
+            filteredChannels = channels.filter(ch => {
+                const matchesSearch = ch.name.toLowerCase().includes(query);
+                const matchesGroup = currentGroup === 'ALL' || ch.group === currentGroup;
+                const matchesFav = !showOnlyFavs || favorites.includes(ch.id);
+                return matchesSearch && matchesGroup && matchesFav;
+            });
+            renderChannels();
+        }
+
+        function renderChannels() {
+            channelList.innerHTML = '';
+            if (filteredChannels.length === 0) {
+                channelList.innerHTML = '<div class="text-center text-slate-500 py-10 text-sm">لا توجد قنوات مطابقة.</div>';
+                return;
+            }
+
+            filteredChannels.forEach(ch => {
+                const isFav = favorites.includes(ch.id);
+                const div = document.createElement('div');
+                div.className = "flex items-center justify-between p-2 rounded-lg hover:bg-slate-800/80 cursor-pointer transition text-sm group";
+                div.innerHTML = `
+                    <div class="flex items-center gap-2.5 overflow-hidden flex-1" onclick="playChannel('${ch.id}')">
+                        ${ch.logo ? `<img src="${ch.logo}" class="w-6 h-6 object-contain rounded bg-slate-900" onerror="this.style.display='none'">` : '<div class="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-xs text-slate-500"><i data-lucide="tv" class="w-3 h-3"></i></div>'}
+                        <div class="truncate">
+                            <div class="text-slate-200 font-medium truncate">${ch.name}</div>
+                            <div class="text-[10px] text-slate-400 truncate">${ch.group}</div>
+                        </div>
+                    </div>
+                    <button onclick="toggleFav('${ch.id}', event)" class="p-1 hover:text-amber-400 text-slate-500 transition">
+                        <i data-lucide="star" class="w-4 h-4 ${isFav ? 'fill-amber-400 text-amber-400' : ''}"></i>
+                    </button>
+                `;
+                channelList.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        function toggleFav(id, event) {
+            event.stopPropagation();
+            if (favorites.includes(id)) {
+                favorites = favorites.filter(favId => favId !== id);
+            } else {
+                favorites.push(id);
+            }
+            localStorage.setItem('iptv_favs', JSON.stringify(favorites));
+            filterChannels();
+        }
+
+        function playChannel(id) {
+            const ch = channels.find(c => c.id === id);
+            if (!ch) return;
+
+            // Update Overlay
+            overlayTitle.textContent = ch.name;
+            overlayGroup.textContent = ch.group;
+            if (ch.logo) {
+                overlayLogo.src = ch.logo;
+                overlayLogo.classList.remove('hidden');
+            } else {
+                overlayLogo.classList.add('hidden');
+            }
+            channelOverlay.classList.remove('hidden');
+
+            // Play Video
+            if (Hls.isSupported() && ch.url.includes('.m3u8')) {
+                if (hls) hls.destroy();
+                hls = new Hls();
+                hls.loadSource(ch.url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = ch.url;
+                video.play();
+            } else {
+                video.src = ch.url;
+                video.play();
+            }
+        }
+    </script>
+</body>
+</html>
